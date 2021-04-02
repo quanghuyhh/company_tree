@@ -164,7 +164,7 @@ class TestScript
             echo "<pre>" . $exception->getMessage() . "</pre>";
         }
 
-//        echo 'Total time: ' . (microtime(true) - $start);
+        echo 'Total time: ' . (microtime(true) - $start);
     }
 }
 
