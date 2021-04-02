@@ -95,14 +95,37 @@ class CommonHelpers
         return $property->getValue($obj);
     }
 
-    /**
-     * @description: Get children from given parents
-     * @param $parents
-     * @param $children
-     * @param $key
-     * @return array
-     */
-    static function getChildren(&$parents, $children, $key)
+    static function group_by($array, $key)
+    {
+        $return = array();
+        foreach ($array as $val) {
+            $return[$val->{$key}][] = $val;
+        }
+        return $return;
+    }
+
+
+    static function assignTravelsToCompany($companies, $travels)
+    {
+        $groupTravels = CommonHelpers::group_by($travels, 'companyId');
+        array_map(function ($company) use ($groupTravels) {
+            $company->cost = array_sum(array_column($groupTravels[$company->id], 'price'));
+            return $company;
+        }, $companies);
+        return $companies;
+    }
+
+    static function createTreeAndCalculateCost($items, $root = 0, $key = 'parentId')
+    {
+        $parents = array();
+        foreach ($items as $item) {
+            $parents[self::getKey($item, $key)][] = $item;
+        }
+
+        return self::calculateChildCost($parents, $parents[$root], $key);
+    }
+
+    static function calculateChildCost(&$parents, $children, $key)
     {
         $tree = array();
         if (empty($children)) {
@@ -111,51 +134,15 @@ class CommonHelpers
 
         foreach ($children as $child) {
             if (isset($parents[$child->id])) {
-                $child->children = self::getChildren($parents, $parents[$child->id], $key);
+                $child->children = self::calculateChildCost($parents, $parents[$child->id], $key);
+                $child->cost += array_sum(array_column($child->children, 'cost'));
+            } else {
+                $child->children = [];
             }
             $tree[] = $child;
         }
 
         return $tree;
-    }
-
-    /**
-     * @description: Create tree from given data.
-     * @param $items
-     * @param int $root
-     * @param string $key
-     * @return array
-     * @throws ReflectionException
-     */
-    static function createTree($items, $root = 0, $key = 'parentId')
-    {
-        $parents = array();
-        foreach ($items as $item) {
-            $parents[self::getKey($item, $key)][] = $item;
-        }
-
-        return self::getChildren($parents, $parents[$root], $key);
-    }
-
-    /**
-     * @description: Combine and group travels by companies.
-     * @param $travels
-     * @param $companies
-     * @return array
-     * @throws ReflectionException
-     */
-    static function groupTravelByCompany($travels, $companies)
-    {
-        $groupTravels = self::createTree($travels, 0, 'companyId');
-        $combined = array_map(function ($company) use ($groupTravels) {
-            $children = $groupTravels[$company->id] ?? [];
-            $company->children = $children;
-            $company->cost = $children ? array_sum(array_column($children, 'price')) : 0;
-
-            return $company;
-        }, $companies);
-
-        return self::createTree($combined);
     }
 }
 
@@ -169,13 +156,15 @@ class TestScript
             $companies = APIHelpers::getCompanies();
             $travels = APIHelpers::getTravels();
 
-            $groupTravels = CommonHelpers::groupTravelByCompany($travels, $companies);
-            echo json_encode($groupTravels);
+            $companies = CommonHelpers::assignTravelsToCompany($companies, $travels);
+            $companyTree = CommonHelpers::createTreeAndCalculateCost($companies);
+
+            echo json_encode($companyTree);
         } catch (Exception $exception) {
             echo "<pre>" . $exception->getMessage() . "</pre>";
         }
 
-        echo 'Total time: ' . (microtime(true) - $start);
+//        echo 'Total time: ' . (microtime(true) - $start);
     }
 }
 
